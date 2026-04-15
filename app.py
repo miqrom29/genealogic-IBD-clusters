@@ -337,58 +337,96 @@ def build_pairs_from_ancibd(raw_bytes: bytes, filename: str) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def build_pairs_from_classic(raw_bytes: bytes, filename: str) -> pd.DataFrame:
     sep = "\t" if filename.lower().endswith(".tsv") else detect_separator(raw_bytes)
-    df = pd.read_csv(io.BytesIO(raw_bytes), sep=sep, dtype=str, on_bad_lines="skip")
+
+    df = pd.read_csv(
+        io.BytesIO(raw_bytes),
+        sep=sep,
+        dtype=str,
+        on_bad_lines="skip",
+        low_memory=False,
+    )
     df.columns = [str(c).strip() for c in df.columns]
-    cols = {c.lower(): c for c in df.columns}
 
-    id1_col = (
-        cols.get("sample1")
-        or cols.get("id1")
-        or cols.get("kit1")
-        or cols.get("profile1")
-        or cols.get("person1")
-    )
+    def norm_col(c: str) -> str:
+        c = str(c).strip().replace("\ufeff", "")
+        c = c.lower()
+        c = re.sub(r"[\s\-/]+", "_", c)
+        return c
 
-    id2_col = (
-        cols.get("sample2")
-        or cols.get("id2")
-        or cols.get("kit2")
-        or cols.get("profile2")
-        or cols.get("person2")
-        or cols.get("match")
-        or cols.get("match_name")
-        or cols.get("display name")
-    )
+    raw_cols = list(df.columns)
 
-    tot_col = (
-        cols.get("total_cm")
-        or cols.get("total cM".lower())
-        or cols.get("length_cm")
-        or cols.get("tot_cm")
-        or cols.get("shared cm")
-        or cols.get("shared cM".lower())
-        or cols.get("genetic distance")
-        or cols.get("total shared dna")
-    )
+    def find_first(predicates):
+        for raw in raw_cols:
+            n = norm_col(raw)
+            for p in predicates:
+                if p(n):
+                    return raw
+        return None
 
-    if id1_col is None and "display name" in cols and "percent dna shared" in cols:
-        focal = "FOCAL"
-        pct_col = cols["percent dna shared"]
-        tmp = df[[cols["display name"], pct_col]].copy()
+    id1_col = find_first([
+        lambda n: n == "sample1",
+        lambda n: n == "id1",
+        lambda n: n == "kit1",
+        lambda n: n == "profile1",
+        lambda n: n == "person1",
+        lambda n: n == "individual1",
+        lambda n: n == "sample_1",
+        lambda n: n == "id_1",
+        lambda n: n.endswith("1") and any(k in n for k in ["sample", "id", "kit", "profile", "person", "individual"]),
+    ])
+
+    id2_col = find_first([
+        lambda n: n == "sample2",
+        lambda n: n == "id2",
+        lambda n: n == "kit2",
+        lambda n: n == "profile2",
+        lambda n: n == "person2",
+        lambda n: n == "individual2",
+        lambda n: n == "sample_2",
+        lambda n: n == "id_2",
+        lambda n: n == "match",
+        lambda n: n == "match_name",
+        lambda n: n == "display_name",
+        lambda n: n.endswith("2") and any(k in n for k in ["sample", "id", "kit", "profile", "person", "individual"]),
+    ])
+
+    tot_col = find_first([
+        lambda n: n == "total_cm",
+        lambda n: n == "shared_cm",
+        lambda n: n == "ibd_cm",
+        lambda n: n == "shared_dna",
+        lambda n: n == "genetic_distance",
+        lambda n: n == "length_cm",
+        lambda n: n == "tot_cm",
+        lambda n: n == "cm",
+        lambda n: "ibd" in n and "cm" in n,
+        lambda n: "total" in n and "cm" in n,
+        lambda n: "shared" in n and "cm" in n,
+        lambda n: "shared" in n and "dna" in n,
+        lambda n: "genetic" in n and "distance" in n,
+    ])
+
+    if id1_col is None and find_first([lambda n: n == "display_name"]) and find_first([lambda n: n == "percent_dna_shared"]):
+        name_col = find_first([lambda n: n == "display_name"])
+        pct_col = find_first([lambda n: n == "percent_dna_shared"])
 
         def pct_to_cm(v):
             f = norm_float(str(v).replace("%", ""))
             return round(f * 71, 1) if f is not None else None
 
         out = pd.DataFrame({
-            "sample1": focal,
-            "sample2": tmp[cols["display name"]].apply(clean_id),
-            "total_cM": tmp[pct_col].apply(pct_to_cm),
+            "sample1": "FOCAL",
+            "sample2": df[name_col].apply(clean_id),
+            "total_cM": df[pct_col].apply(pct_to_cm),
         }).dropna(subset=["total_cM"]).copy()
         return out
 
     if id1_col is None or id2_col is None or tot_col is None:
-        raise ValueError(f"Unsupported classic pairs format. Columns found: {list(df.columns)}")
+        raise ValueError(
+            "Unsupported classic pairs format. "
+            f"Columns found: {raw_cols}. "
+            f"Resolved id1={id1_col}, id2={id2_col}, total={tot_col}"
+        )
 
     out = pd.DataFrame({
         "sample1": df[id1_col].apply(clean_id),
@@ -623,7 +661,13 @@ elif input_mode == "Classic IBD pairs CSV/TSV":
         st.stop()
 
     raw = ibd_file.getvalue()
-    df = build_pairs_from_classic(raw, ibd_file.name)
+
+    try:
+        df = build_pairs_from_classic(raw, ibd_file.name)
+    except Exception as e:
+        st.error(str(e))
+        st.stop()
+
     source_label = f"Classic pairs ({ibd_file.name})"
 
 else:
@@ -939,3 +983,4 @@ with right:
 if segments_df is not None:
     st.subheader("Unified segments preview")
     st.dataframe(segments_df.head(200), width="stretch", height=200)
+
