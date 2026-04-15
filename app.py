@@ -504,7 +504,7 @@ def norm_meta_col(c: str) -> str:
 meta = None
 if meta_file is not None:
     raw_meta = meta_file.getvalue()
-    text_preview = raw_meta.decode("utf-8", errors="ignore")
+    text_preview = raw_meta[:20000].decode("utf-8", errors="ignore")
 
     if meta_file.name.lower().endswith((".tsv", ".anno", ".txt")):
         sep = "\t"
@@ -515,21 +515,24 @@ if meta_file is not None:
     else:
         sep = ","
 
-    meta = pd.read_csv(io.StringIO(text_preview), sep=sep, dtype=str, on_bad_lines="skip")
-    meta.columns = [str(c).strip() for c in meta.columns]
+    header_df = pd.read_csv(
+        io.BytesIO(raw_meta),
+        sep=sep,
+        dtype=str,
+        nrows=0,
+        on_bad_lines="skip",
+    )
+    header_cols = [str(c).strip() for c in header_df.columns]
 
-    meta_cols_norm = {norm_meta_col(c): c for c in meta.columns}
-    meta_cols_list = list(meta.columns)
-
-    def find_first_col(predicates):
-        for raw_col in meta_cols_list:
+    def find_first_col(cols, predicates):
+        for raw_col in cols:
             n = norm_meta_col(raw_col)
             for p in predicates:
                 if p(n):
                     return raw_col
         return None
 
-    sid_col = find_first_col([
+    sid_col = find_first_col(header_cols, [
         lambda n: n == "sample",
         lambda n: n == "iid",
         lambda n: n == "individual id",
@@ -537,29 +540,39 @@ if meta_file is not None:
         lambda n: n == "id",
         lambda n: n.startswith("individual id"),
         lambda n: "individual id" in n,
-        lambda n: "genetic id" == n,
-        lambda n: n.startswith("genetic id"),
-    ]) or meta_cols_list[0]
+    ]) or header_cols[0]
 
-    mt_col = find_first_col([
+    mt_col = find_first_col(header_cols, [
         lambda n: n == "haplogroup_mt",
         lambda n: n == "mt_haplogroup",
-        lambda n: n == "mthap",
-        lambda n: n == "mt",
         lambda n: "mtdna haplogroup" in n,
         lambda n: n.startswith("mtdna haplogroup"),
         lambda n: "mitochond" in n and "haplogroup" in n,
     ])
 
-    y_col = find_first_col([
+    y_col = find_first_col(header_cols, [
         lambda n: n == "haplogroup_y",
         lambda n: n == "y_haplogroup",
-        lambda n: n == "yhap",
-        lambda n: n == "y",
         lambda n: n.startswith("y haplogroup"),
         lambda n: "y haplogroup" in n,
         lambda n: "ychr" in n and "haplogroup" in n,
     ])
+
+    wanted_cols = [sid_col]
+    if mt_col is not None:
+        wanted_cols.append(mt_col)
+    if y_col is not None and y_col not in wanted_cols:
+        wanted_cols.append(y_col)
+
+    meta = pd.read_csv(
+        io.BytesIO(raw_meta),
+        sep=sep,
+        dtype=str,
+        usecols=wanted_cols,
+        on_bad_lines="skip",
+        low_memory=False,
+    )
+    meta.columns = [str(c).strip() for c in meta.columns]
 
     meta["sample_clean"] = meta[sid_col].apply(clean_id)
     meta = meta.set_index("sample_clean")
@@ -574,9 +587,7 @@ if meta_file is not None:
     else:
         meta["haplogroup_y"] = pd.NA
 
-    st.sidebar.write("Detected sample column:", sid_col)
-    st.sidebar.write("Detected mt column:", mt_col)
-    st.sidebar.write("Detected Y column:", y_col)
+    st.sidebar.caption(f"Metadata columns detected: ID={sid_col} | mt={mt_col} | Y={y_col}")
 
 # ───────────────────────── Data loading ─────────────────────────
 
