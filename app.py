@@ -354,10 +354,42 @@ input_mode = st.sidebar.radio("Choose input source", [
 ])
 
 st.sidebar.header("Optional sample metadata")
-meta_file = st.sidebar.file_uploader("Metadata CSV (sample,haplogroup_mt,...)", type=["csv"], key="meta")
+
+# Accept CSV / TSV / TXT / AADR .anno
+meta_file = st.sidebar.file_uploader(
+    "Metadata: CSV / TSV / AADR .anno",
+    type=["csv", "tsv", "anno", "txt"],
+    key="meta",
+)
+
 meta = None
 if meta_file is not None:
-    meta = pd.read_csv(meta_file)
+    raw_meta = meta_file.read()
+
+    # Heurística senzilla de separador
+    text_preview = raw_meta.decode("utf-8", errors="ignore")
+    if "\t" in text_preview and (text_preview.count("\t") > text_preview.count(",")):
+        sep = "\t"
+    else:
+        sep = ","
+
+    from io import StringIO
+    meta = pd.read_csv(StringIO(text_preview), sep=sep)
+
+    meta_cols = {c.lower(): c for c in meta.columns}
+    sid_col = meta_cols.get("sample") or list(meta.columns)[0]
+    meta["sample_clean"] = meta[sid_col].apply(clean_id)
+    meta = meta.set_index("sample_clean")
+
+    if "haplogroup_mt" not in meta.columns:
+        col_mt = meta_cols.get("haplogroup_mt") or meta_cols.get("mt_haplogroup")
+        if col_mt:
+            meta.rename(columns={col_mt: "haplogroup_mt"}, inplace=True)
+
+    if "haplogroup_y" not in meta.columns:
+        col_y = meta_cols.get("haplogroup_y") or meta_cols.get("y_haplogroup")
+        if col_y:
+            meta.rename(columns={col_y: "haplogroup_y"}, inplace=True)
     meta_cols = {c.lower(): c for c in meta.columns}
     sid_col = meta_cols.get("sample") or list(meta.columns)[0]
     meta["sample_clean"] = meta[sid_col].apply(clean_id)
