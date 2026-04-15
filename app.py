@@ -556,7 +556,7 @@ if meta_file is not None:
         lambda n: n == "y_haplogroup",
         lambda n: n == "yhap",
         lambda n: n == "y",
-        lambda n.startswith("y haplogroup"),
+        lambda n: n.startswith("y haplogroup"),
         lambda n: "y haplogroup" in n,
         lambda n: "ychr" in n and "haplogroup" in n,
     ])
