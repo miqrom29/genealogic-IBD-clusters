@@ -496,6 +496,11 @@ meta_file = st.sidebar.file_uploader(
     key="meta",
 )
 
+def norm_meta_col(c: str) -> str:
+    c = str(c).strip().replace("\ufeff", "")
+    c = re.sub(r"\s+", " ", c)
+    return c.lower()
+
 meta = None
 if meta_file is not None:
     raw_meta = meta_file.getvalue()
@@ -512,39 +517,66 @@ if meta_file is not None:
 
     meta = pd.read_csv(io.StringIO(text_preview), sep=sep, dtype=str, on_bad_lines="skip")
     meta.columns = [str(c).strip() for c in meta.columns]
-    meta_cols = {c.lower(): c for c in meta.columns}
 
-    sid_col = (
-        meta_cols.get("sample")
-        or meta_cols.get("iid")
-        or meta_cols.get("individual_id")
-        or meta_cols.get("id")
-        or list(meta.columns)[0]
-    )
+    meta_cols_norm = {norm_meta_col(c): c for c in meta.columns}
+    meta_cols_list = list(meta.columns)
+
+    def find_first_col(predicates):
+        for raw_col in meta_cols_list:
+            n = norm_meta_col(raw_col)
+            for p in predicates:
+                if p(n):
+                    return raw_col
+        return None
+
+    sid_col = find_first_col([
+        lambda n: n == "sample",
+        lambda n: n == "iid",
+        lambda n: n == "individual id",
+        lambda n: n == "individual_id",
+        lambda n: n == "id",
+        lambda n: n.startswith("individual id"),
+        lambda n: "individual id" in n,
+        lambda n: "genetic id" == n,
+        lambda n: n.startswith("genetic id"),
+    ]) or meta_cols_list[0]
+
+    mt_col = find_first_col([
+        lambda n: n == "haplogroup_mt",
+        lambda n: n == "mt_haplogroup",
+        lambda n: n == "mthap",
+        lambda n: n == "mt",
+        lambda n: "mtdna haplogroup" in n,
+        lambda n: n.startswith("mtdna haplogroup"),
+        lambda n: "mitochond" in n and "haplogroup" in n,
+    ])
+
+    y_col = find_first_col([
+        lambda n: n == "haplogroup_y",
+        lambda n: n == "y_haplogroup",
+        lambda n: n == "yhap",
+        lambda n: n == "y",
+        lambda n.startswith("y haplogroup"),
+        lambda n: "y haplogroup" in n,
+        lambda n: "ychr" in n and "haplogroup" in n,
+    ])
 
     meta["sample_clean"] = meta[sid_col].apply(clean_id)
     meta = meta.set_index("sample_clean")
 
-    if "haplogroup_mt" not in meta.columns:
-        col_mt = (
-            meta_cols.get("haplogroup_mt")
-            or meta_cols.get("mt_haplogroup")
-            or meta_cols.get("mthap")
-            or meta_cols.get("mt")
-        )
-        if col_mt:
-            meta.rename(columns={col_mt: "haplogroup_mt"}, inplace=True)
+    if mt_col is not None and mt_col in meta.columns:
+        meta.rename(columns={mt_col: "haplogroup_mt"}, inplace=True)
+    else:
+        meta["haplogroup_mt"] = pd.NA
 
-    if "haplogroup_y" not in meta.columns:
-        col_y = (
-            meta_cols.get("haplogroup_y")
-            or meta_cols.get("y_haplogroup")
-            or meta_cols.get("yhap")
-            or meta_cols.get("y")
-        )
-        if col_y:
-            meta.rename(columns={col_y: "haplogroup_y"}, inplace=True)
+    if y_col is not None and y_col in meta.columns:
+        meta.rename(columns={y_col: "haplogroup_y"}, inplace=True)
+    else:
+        meta["haplogroup_y"] = pd.NA
 
+    st.sidebar.write("Detected sample column:", sid_col)
+    st.sidebar.write("Detected mt column:", mt_col)
+    st.sidebar.write("Detected Y column:", y_col)
 
 # ───────────────────────── Data loading ─────────────────────────
 
