@@ -12,7 +12,6 @@ st.set_page_config(page_title="IBD Cluster Notes Demo", layout="wide")
 st.title("IBD Cluster Notes Demo")
 st.caption("Production-safe mode: cluster summary first, graph only for selected cluster")
 
-
 # ───────────────────────── Helpers ─────────────────────────
 
 def clean_id(x) -> str:
@@ -21,7 +20,6 @@ def clean_id(x) -> str:
         s = s.split("[", 1)[1].split("]", 1)[0]
     s = re.sub(r"\s+", "", s)
     return s
-
 
 def classify_relationship(total_cm: float) -> str:
     if total_cm >= 2500:
@@ -32,14 +30,12 @@ def classify_relationship(total_cm: float) -> str:
         return "3rd degree"
     return "remote/uncertain"
 
-
 def make_note_line(row: pd.Series) -> str:
     mt = row.get("haplogroup_mt", "NA")
     y = row.get("haplogroup_y", "NA")
     site = row.get("site", "NA")
     region = row.get("region", "NA")
     return f"{row['sample']} | mt={mt} | Y={y} | site={site} | region={region} | {row['cluster']}"
-
 
 def detect_separator(sample_bytes: bytes) -> str:
     text = sample_bytes[:20000].decode("utf-8", errors="ignore")
@@ -48,7 +44,6 @@ def detect_separator(sample_bytes: bytes) -> str:
     if text.count(";") > text.count(","):
         return ";"
     return ","
-
 
 def norm_float(s) -> Optional[float]:
     if s is None:
@@ -73,13 +68,11 @@ def norm_float(s) -> Optional[float]:
     except ValueError:
         return None
 
-
 def norm_col(c: str) -> str:
     c = str(c).strip().replace("\ufeff", "")
     c = c.lower()
     c = re.sub(r"[\s\-/]+", "_", c)
     return c
-
 
 def deduplicate_undirected_pairs(df: pd.DataFrame, keep: str = "max") -> pd.DataFrame:
     x = df.copy()
@@ -108,7 +101,6 @@ def deduplicate_undirected_pairs(df: pd.DataFrame, keep: str = "max") -> pd.Data
         .rename(columns={"sample1_canon": "sample1", "sample2_canon": "sample2"})
     )
     return out
-
 
 # ───────────────────────── ancIBD block TSV parser ─────────────────────────
 
@@ -161,12 +153,10 @@ def parse_ancibd_block_tsv(raw_bytes: bytes, source: str) -> pd.DataFrame:
 
     return pd.DataFrame(pairs, columns=["sample1", "sample2", "total_cM", "source_file", "platform"])
 
-
 # ───────────────────────── Multi-CSV parsers ─────────────────────────
 
 def _empty_segs() -> pd.DataFrame:
     return pd.DataFrame(columns=["id1", "id2", "chrom", "start", "end", "cM", "snps", "platform", "source_file"])
-
 
 def parse_529_segments(df, source):
     df2 = df.rename(columns={
@@ -180,7 +170,6 @@ def parse_529_segments(df, source):
     pairs["platform"] = "529andYou"
     pairs["source_file"] = source
     return pairs, df2[["id1", "id2", "chrom", "start", "end", "cM", "snps", "platform", "source_file"]]
-
 
 def parse_geneanet_segments(df, source):
     df2 = df.rename(columns={
@@ -197,7 +186,6 @@ def parse_geneanet_segments(df, source):
     pairs["source_file"] = source
     return pairs, df2[["id1", "id2", "chrom", "start", "end", "cM", "snps", "platform", "source_file"]]
 
-
 def parse_myheritage_matches(df, source, focal):
     cols_map = {c.lower().strip(): c for c in df.columns}
     name_col = cols_map.get("nom") or cols_map.get("name")
@@ -212,7 +200,6 @@ def parse_myheritage_matches(df, source, focal):
     df2["source_file"] = source
     return df2[["id1", "id2", "total_cM", "platform", "source_file"]].dropna(subset=["total_cM"]), _empty_segs()
 
-
 def parse_myheritage_autocluster(df, source):
     cols_lower = {c.lower().strip(): c for c in df.columns}
     name_col = cols_lower.get("name")
@@ -226,7 +213,6 @@ def parse_myheritage_autocluster(df, source):
             continue
         rows.append({"id1": str(row[name_col]).strip(), "id2": "FOCAL", "total_cM": cm, "platform": "MyHeritage AutoCluster", "source_file": source})
     return pd.DataFrame(rows), _empty_segs()
-
 
 def parse_ftdna_matches(df, source, focal):
     cols_lower = {c.lower().strip(): c for c in df.columns}
@@ -248,7 +234,6 @@ def parse_ftdna_matches(df, source, focal):
     df2["platform"] = "FTDNA"
     df2["source_file"] = source
     return df2[["id1", "id2", "total_cM", "platform", "source_file"]].dropna(subset=["total_cM"]), _empty_segs()
-
 
 def parse_23andme_relatives(df, source, focal):
     cols_lower = {c.lower().strip(): c for c in df.columns}
@@ -295,7 +280,6 @@ def parse_23andme_relatives(df, source, focal):
 
     return pd.DataFrame(columns=["id1", "id2", "total_cM"]), _empty_segs()
 
-
 def detect_and_parse(file, focal_sample):
     raw_bytes = file.getvalue()
     sep = detect_separator(raw_bytes)
@@ -327,13 +311,11 @@ def detect_and_parse(file, focal_sample):
         return p, s, "23andMe (relatives)"
     return pd.DataFrame(columns=["id1", "id2", "total_cM", "platform", "source_file"]), _empty_segs(), "Unknown/unsupported (yet)"
 
-
 # ───────────────────────── Cached builders ─────────────────────────
 
 @st.cache_data(show_spinner=False)
 def build_pairs_from_ancibd(raw_bytes: bytes, filename: str) -> pd.DataFrame:
     return parse_ancibd_block_tsv(raw_bytes, filename)
-
 
 @st.cache_data(show_spinner=False)
 def build_pairs_from_classic(raw_bytes: bytes, filename: str) -> pd.DataFrame:
@@ -347,7 +329,6 @@ def build_pairs_from_classic(raw_bytes: bytes, filename: str) -> pd.DataFrame:
         low_memory=False,
         header=None,
     )
-
     first_row = df.iloc[0].astype(str).tolist()
     first_row_norm = [norm_col(c) for c in first_row]
     looks_like_header = any(x in first_row_norm for x in ["id1", "id2", "sample1", "sample2", "total_cm", "ibd_cm", "shared_cm", "cm"])
@@ -419,7 +400,6 @@ def build_pairs_from_classic(raw_bytes: bytes, filename: str) -> pd.DataFrame:
     }).dropna(subset=["total_cM"]).copy()
     return out
 
-
 @st.cache_data(show_spinner=False)
 def build_pairs_from_multi(files_payload, focal_sample: str):
     all_pairs, all_segs, summary_rows = [], [], []
@@ -443,7 +423,6 @@ def build_pairs_from_multi(files_payload, focal_sample: str):
     segs = pd.concat(all_segs, ignore_index=True) if all_segs else None
     return df, segs, pd.DataFrame(summary_rows)
 
-
 @st.cache_data(show_spinner=False)
 def build_graph_objects(df_small: pd.DataFrame):
     G = nx.Graph()
@@ -459,7 +438,6 @@ def build_graph_objects(df_small: pd.DataFrame):
             cluster_map[node] = cname
         cluster_sizes.append((cname, len(comp_list)))
     return G, cluster_map, cluster_sizes
-
 
 @st.cache_data(show_spinner=False)
 def build_cluster_summary(df_small: pd.DataFrame, cluster_map: dict):
@@ -478,14 +456,12 @@ def build_cluster_summary(df_small: pd.DataFrame, cluster_map: dict):
     summary["node_count"] = summary["cluster"].map(lambda c: len(nodes_per_cluster.get(c, set())))
     return summary.sort_values(["node_count", "pair_count", "max_cM"], ascending=False)
 
-
 # ───────────────────────── Session state ─────────────────────────
 
 if "favorites" not in st.session_state:
     st.session_state["favorites"] = set()
 if "pedigree_notes" not in st.session_state:
     st.session_state["pedigree_notes"] = ""
-
 
 # ───────────────────────── Sidebar inputs ─────────────────────────
 
@@ -503,12 +479,10 @@ meta_file = st.sidebar.file_uploader(
     key="meta",
 )
 
-
 def norm_meta_col(c: str) -> str:
     c = str(c).strip().replace("\ufeff", "")
     c = re.sub(r"\s+", " ", c)
     return c.lower()
-
 
 meta = None
 if meta_file is not None:
@@ -564,30 +538,28 @@ if meta_file is not None:
         lambda n: "ychr" in n and "haplogroup" in n,
     ])
 
-    # ── Columnes noves Akbari2026 ──
-bp_col = find_first_col(header_cols, [
-    lambda n: "date mean in bp" in n,
-    lambda n: n == "date_mean_bp",
-    lambda n: n == "st1_date_mean_bp",
-])
-br_col = find_first_col(header_cols, [
-    lambda n: "broad geographic region" in n,
-    lambda n: n == "broad_region",
-    lambda n: n == "region",
-])
-if bp_col and bp_col in meta.columns and bp_col != "date_mean_bp":
-    meta.rename(columns={bp_col: "date_mean_bp"}, inplace=True)
-if br_col and br_col in meta.columns and br_col != "broad_region":
-    meta.rename(columns={br_col: "broad_region"}, inplace=True)
+    # ── Columnes noves Akbari2026: detectem el nom real de la columna ──
+    bp_col = find_first_col(header_cols, [
+        lambda n: "date mean in bp" in n,
+        lambda n: n == "date_mean_bp",
+        lambda n: n == "st1_date_mean_bp",
+    ])
+    br_col = find_first_col(header_cols, [
+        lambda n: "broad geographic region" in n,
+        lambda n: n == "broad_region",
+    ])
 
+    # Columnes addicionals a carregar (noms exactes del CSV)
     extra_candidates = [
         "country", "site", "culture", "date_mean_bp", "full_date", "location", "region",
         "Closest cluster", "closest pop", "closest sample", "distance", "F_MISS", "N_MISS",
-        "cluster_id", "cluster_size", "ID_core", "st1_uid", "date_source"
-         # ── NOU ──
-        "Date mean in BP in years before 1950 CE",
-        "Broad geographic region (N=North, C=Central, SW=Southwest, SE=Southeast, E=East)",
+        "cluster_id", "cluster_size", "ID_core", "st1_uid", "date_source",
     ]
+    # Afegim el nom real de les columnes noves si existeixen al fitxer
+    if bp_col is not None:
+        extra_candidates.append(bp_col)
+    if br_col is not None:
+        extra_candidates.append(br_col)
 
     wanted_cols = [sid_col]
     if mt_col is not None:
@@ -598,6 +570,7 @@ if br_col and br_col in meta.columns and br_col != "broad_region":
         if col in header_cols and col not in wanted_cols:
             wanted_cols.append(col)
 
+    # Llegim el CSV amb les columnes volgudes
     meta = pd.read_csv(
         io.BytesIO(raw_meta),
         sep=sep,
@@ -607,6 +580,12 @@ if br_col and br_col in meta.columns and br_col != "broad_region":
         low_memory=False,
     )
     meta.columns = [str(c).strip() for c in meta.columns]
+
+    # ── Rename columnes Akbari2026 a noms curts (ara meta ja existeix) ──
+    if bp_col is not None and bp_col in meta.columns and bp_col != "date_mean_bp":
+        meta.rename(columns={bp_col: "date_mean_bp"}, inplace=True)
+    if br_col is not None and br_col in meta.columns and br_col != "broad_region":
+        meta.rename(columns={br_col: "broad_region"}, inplace=True)
 
     meta["sample_clean"] = (
         meta[sid_col]
@@ -628,10 +607,10 @@ if br_col and br_col in meta.columns and br_col != "broad_region":
 
     for c in ["haplogroup_mt", "haplogroup_y"]:
         meta[c] = meta[c].replace(r"^\s*$", pd.NA, regex=True)
-        meta[c] = meta[c].replace({"nan": pd.NA, "None": pd.NA, "<NA>": pd.NA, ".": pd.NA, "..": pd.NA, "n/a": pd.NA, "NA": pd.NA})
+        meta[c] = meta[c].replace({"nan": pd.NA, "None": pd.NA, "": pd.NA, ".": pd.NA, "..": pd.NA, "n/a": pd.NA, "NA": pd.NA})
         meta[c] = meta[c].astype("string")
 
-    for c in ["country", "site", "culture", "region", "Closest cluster", "closest pop", "date_source"]:
+    for c in ["country", "site", "culture", "region", "broad_region", "Closest cluster", "closest pop", "date_source"]:
         if c in meta.columns:
             meta[c] = meta[c].astype("category")
 
@@ -640,7 +619,10 @@ if br_col and br_col in meta.columns and br_col != "broad_region":
     st.sidebar.caption(f"Metadata columns detected: ID={sid_col} | mt={mt_col} | Y={y_col}")
     st.sidebar.caption(f"Metadata rows loaded: {len(meta):,}")
     st.sidebar.caption(f"mt non-null: {meta['haplogroup_mt'].notna().sum():,} | Y non-null: {meta['haplogroup_y'].notna().sum():,}")
-
+    bp_ok = meta["date_mean_bp"].notna().sum() if "date_mean_bp" in meta.columns else 0
+    br_ok = meta["broad_region"].notna().sum() if "broad_region" in meta.columns else 0
+    if bp_ok or br_ok:
+        st.sidebar.caption(f"BP non-null: {bp_ok:,} | broad_region non-null: {br_ok:,}")
 
 # ───────────────────────── Data loading ─────────────────────────
 
@@ -700,9 +682,8 @@ else:
     st.download_button(
         "Download unified pairs CSV",
         df[["sample1", "sample2", "total_cM"]].rename(columns={"sample1": "id1", "sample2": "id2"}).to_csv(index=False).encode("utf-8"),
-        file_name="unified_pairs.csv", mime="text/csv"
+        file_name="unified_pairs.csv", mime="text/csv",
     )
-
 
 # ───────────────────────── Optional threshold before graph build ─────────────────────────
 
@@ -713,7 +694,7 @@ col_a, col_b = st.columns([3, 1])
 with col_a:
     st.dataframe(
         df[["sample1", "sample2", "total_cM", "relationship_class"]].sort_values("total_cM", ascending=False).head(1000),
-        width="stretch", height=240
+        width="stretch", height=240,
     )
 with col_b:
     cm_min_global = float(df["total_cM"].min())
@@ -755,8 +736,9 @@ for node in G.nodes():
     if m is not None:
         for key in [
             "haplogroup_mt", "haplogroup_y", "country", "site", "culture", "date_mean_bp",
-            "full_date", "location", "region", "Closest cluster", "closest pop", "closest sample",
-            "distance", "F_MISS", "N_MISS", "cluster_id", "cluster_size", "ID_core", "st1_uid", "date_source"
+            "full_date", "location", "region", "broad_region", "Closest cluster", "closest pop",
+            "closest sample", "distance", "F_MISS", "N_MISS", "cluster_id", "cluster_size",
+            "ID_core", "st1_uid", "date_source",
         ]:
             if key in m:
                 row[key] = m.get(key)
@@ -771,7 +753,6 @@ st.dataframe(cluster_summary.head(500), width="stretch", height=260)
 if meta is not None and not df_samples.empty:
     matched = df_samples["sample"].astype(str).apply(clean_id).isin(meta.index).sum()
     st.caption(f"Metadata matched to {matched} / {len(df_samples)} samples in current graph")
-
 
 # ───────────────────────── Sidebar cluster controls ─────────────────────────
 
@@ -811,7 +792,7 @@ if meta is not None and not df_samples.empty:
                     hits_hg.groupby("cluster")
                     .agg(
                         n_samples=("sample", "count"),
-                        samples=("sample", lambda x: ", ".join(list(map(str, x))[:5]) + ("…" if len(x) > 5 else "")),
+                        samples=("sample", lambda x: ", ".join(list(map(str, x))[:5]) + ("..." if len(x) > 5 else "")),
                     )
                     .reset_index()
                     .rename(columns={"cluster": "Cluster", "n_samples": "N samples", "samples": "Examples"})
@@ -826,7 +807,6 @@ if meta is not None and not df_samples.empty:
                         key="hg_cluster_select",
                     )
 
-
 default_cluster = cluster_from_id or cluster_from_hg or (clusters[0] if clusters else None)
 if default_cluster is None:
     st.warning("No clusters available after filtering.")
@@ -836,7 +816,7 @@ selected = st.sidebar.selectbox("Select cluster to inspect", clusters, index=clu
 
 cf1, cf2 = st.sidebar.columns(2)
 with cf1:
-    if st.button("★ Favorite"):
+    if st.button("Favorite"):
         st.session_state["favorites"].add(selected)
 with cf2:
     if st.button("Clear favs"):
@@ -845,7 +825,6 @@ if st.session_state["favorites"]:
     st.sidebar.markdown("**Favorites**")
     for c in sorted(st.session_state["favorites"]):
         st.sidebar.write(f"- {c}")
-
 
 # ───────────────────────── Selected cluster only ─────────────────────────
 
@@ -891,7 +870,7 @@ with right:
         max_c = float(selected_pairs["total_cM"].max())
 
         if min_c == max_c:
-            st.caption(f"Single pair in cluster: {min_c:.2f} cM — no filter applied.")
+            st.caption(f"Single pair in cluster: {min_c:.2f} cM -- no filter applied.")
             min_cm = min_c
         else:
             fc1, fc2 = st.columns([3, 1])
@@ -946,8 +925,9 @@ with right:
                     for k, short in [
                         ("haplogroup_mt", "mt"), ("haplogroup_y", "Y"), ("site", "site"),
                         ("culture", "culture"), ("region", "region"), ("full_date", "date"),
+                        ("date_mean_bp", "BP"), ("broad_region", "geo"),
                         ("Closest cluster", "closest_cluster"), ("closest pop", "closest_pop"),
-                        ("distance", "dist"), ("F_MISS", "F_MISS")
+                        ("distance", "dist"), ("F_MISS", "F_MISS"),
                     ]:
                         if k in m and m.get(k) is not None and pd.notna(m.get(k)):
                             label_parts.append(f"{short}: {m.get(k)}")
@@ -961,7 +941,7 @@ with right:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines", line=dict(color="rgba(150,150,150,0.35)", width=1), hoverinfo="none"))
             fig.add_trace(go.Scatter(x=node_x, y=node_y, mode="markers+text", text=text_labels, textposition="top center", marker=dict(size=10, color="steelblue"), hovertext=hovertext, hoverinfo="text"))
-            fig.update_layout(title=f"IBD network — {selected}", xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False, height=680, margin=dict(l=10, r=10, t=50, b=10))
+            fig.update_layout(title=f"IBD network -- {selected}", xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False, height=680, margin=dict(l=10, r=10, t=50, b=10))
             st.plotly_chart(fig, width="stretch")
 
 if segments_df is not None:
